@@ -1,0 +1,262 @@
+spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.11:2.4.5 ad_manager.py 18.211.252.152:9092 de-capstone1 ec2-54-145-108-208.compute-1.amazonaws.com root 123 upgrad
+
+
+wget http://dev.mysql.com/get/Downloads/Connector-Python/mysql-connector-python-2.1.6.tar.gz (used 2.1.4 at that time)
+tar -xf mysql-connector-python-2.1.6.tar.gz
+cd mysql-connector-python-2.1.6/
+sudo python3 setup.py install
+
+python3 ad_manager.py 18.211.252.152:9092 de-capstone1 ec2-54-81-152-149.compute-1.amazonaws.com root 123 upgrad
+
+python3 ad_server.py ec2-54-81-152-149.compute-1.amazonaws.com root 123 upgrad
+
+--> Feedback handler
+python3 feedback_handler.py ec2-54-81-152-149.compute-1.amazonaws.com user-feedback root 123 upgrad
+python3 feedback_handler.py 18.211.252.152:9092 user-feedback ec2-54-152-58-150.compute-1.amazonaws.com root 123 upgrad
+python3 feedback_handler.py ec2-54-162-230-254.compute-1.amazonaws.com user-feedback root 123 upgrad
+:
+python3 user_simulator.py ec2-54-81-152-149.compute-1.amazonaws.com root 123 upgrad http 0.0.0.0 5000 0.0.0.0 8000
+python3 slot_budget_updater.py ec2-54-81-152-149.compute-1.amazonaws.com root 123 upgrad
+
+
+sudo service crond start
+
+-->  crontab -e
+
+*/10 * * * * python3 ~/slot_budget_updater ec2-3-87-120-245.compute-1.amazonaws.com root 123 upgrad >> ~/tmp/cron-output.txt
+
+*/10 * * * * python3 ~/upgrad/slot_budget_updater.py localhost root 123 upgrad >> ~/upgrad/cron-output.txt
+
+*/10 * * * * python3 /root/slot_budget_updater.py ec2-23-22-139-140.compute-1.amazonaws.com root 123 upgrad >> /tmp/cron-output.txt
+
+*/1 * * * *    python3 home/hadoop/ctest2.py >> /tmp/crontest2.txt
+ 
+11:11 >>always use absolute path [get absolute path from pwd]
+*/1 * * * * date >> /tmp/opcron.txt
+cat /tmp/cron-output.txt
+#final cron >>
+*/10 * * * * python3 /root/slot_budget_updater.py ec2-54-81-152-149.compute-1.amazonaws.com root 123 upgrad >> /tmp/cron-output.txt
+
+--> User Feedback Writer
+spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.11:2.4.5 user_feedback_writer.py 127.0.0.1 9092 user-feedback
+
+
+sqoop import -Dorg.apache.sqoop.splitter.allow_text_splitter=true --connect jdbc:mysql://ec2-3-87-120-245.compute-1.amazonaws.com:3306/upgrad --username root --password 123 \
+--query "select campaignID,category,budget,cpm,cpc,cpa,targetDevice from upgrad.ads WHERE \$CONDITIONS" \
+--split-by campaignID \
+--hive-import --hive-table upgrad.ads \
+--target-dir /user/root/UpGradHivedd \
+-m 1
+
+data inpath "/user/root/user-feedback-output/*.csv" into table upgrad.adsfeedback
+
+
+create table adsfeedback( 
+request_id varchar(100), 
+campaign_id varchar(100), 
+user_id varchar(100), 
+click tinyint, 
+view tinyint, 
+acquisition tinyint, 
+auction_cpm double, 
+auction_cpc double, 
+auction_cpa double, 
+target_age_range varchar(10), 
+target_Location varchar(100), 
+target_gender varchar(3), 
+target_income_bucket varchar(3), 
+target_device_type varchar(20), 
+campaign_start_time timestamp, 
+campaign_end_time timestamp, 
+user_action varchar(20), 
+expenditure double, 
+time_stamp timestamp 
+); row format delimited fields terminated by ',';
+
+data inpath /user/root/user-feedback-output/*.csv into table upgrad.adsfeedback;
+
+
+wget -P /root/ https://de-capstone-project1.s3.amazonaws.com/users_500k.csv
+
+LOAD data local infile '~/users_500k.csv' \
+INTO TABLE users \
+fields terminated by '|' \
+ignore 1 rows;
+
+
+#cron job>>
+
+
+installed mysql-connector-2.2.9
+
+
+MySQL Queries
+/* #convert character set to UTF-8 */
+ALTER TABLE ads CONVERT TO CHARACTER SET utf8;
+
+/* #Ads Storage Table */
+create table ads (
+ text varchar(300) not null,
+ category varchar(200) not null,
+ keywords varchar(200) not null,
+ campaignID varchar(50) primary key,
+ status varchar(10) not null,
+ targetGender varchar(3) not null,
+ targetAgeStart TINYINT not null,
+ targetAgeEnd TINYINT not null,
+ targetCity varchar(20) not null,
+ targetState varchar(20) not null,
+ targetCountry varchar(20) not null,
+ targetIncomeBucket varchar(5) not null,
+ targetDevice varchar(20) not null,
+ cpc double not null,
+ cpa double not null,
+ cpm double not null,
+ budget double not null,
+ currentSlotBudget double not null,
+ dateRangeStart date not null,
+ dateRangeEnd date not null,
+ timeRangeStart time not null,
+ timeRangeEnd time not null
+);
+/* # Ads serve Table */
+create table served_ads(
+ requestID varchar(50) primary key,
+ campaignID varchar(50) not null,
+ userID varchar(50) not null,
+ auctionCPM decimal(6,6) not null,
+ auctionCPC decimal(6,6) not null,
+ auctionCPA decimal(6,6) not null,
+ targetAgeRange varchar(5) not null,
+ targetLocation varchar(50) not null,
+ targetGender varchar(3) not null,
+ targetIncomeBucket varchar(5) not null,
+ targetDeviceType varchar(20) not null,
+ campaignStartTime DATETIME not null,
+ campaignEndTime DATETIME not null,
+ userFeedbackTimeStamp TIMESTAMP not null
+);
+/* # User table */
+create table users(
+ id varchar(50) primary key,
+ age TINYINT not null,
+ gender varchar(1) not null,
+ internetUsage varchar(50),
+ incomeBucket varchar(3),
+ userAgentString varchar(300),
+ device_type varchar(50),
+ Websites varchar(300),
+ Movies varchar(300),
+ Music varchar(300),
+ Program varchar(300),
+ Books varchar(300),
+ Negatives varchar(300),
+ Positives varchar(300)
+);
+
+
+
+
+
+
+sqoop import "-D org.apache.sqoop.splitter.allow_text_splitter=true" --connect jdbc:mysql://ec2-54-172-220-238.compute-1.amazonaws.com/upgrad \
+--username root --password 123 --query "select campaignID,category,budget,cpm,cpc,cpa,targetDevice from upgrad.ads WHERE \$CONDITIONS" --split-by campaignID \
+--hive-import --hive-table upgrad.ads \
+--target-dir /user/root/upgradh
+
+
+hadoop fs -ls /user/root/upgradhivedb/
+
+sqoop import -D org.apache.sqoop.splitter.allow_text_splitter=true
+
+hadoop fs -cat /user/root/capstone/output
+
+
+/user/root/capstone/output
+
+
+
+sqoop import "-D org.apache.sqoop.splitter.allow_text_splitter=true" --connect jdbc:mysql://ec2-54-172-220-238.compute-1.amazonaws.com/upgrad --username root --password 123 --query "select campaignID,category,budget,cpm,cpc,cpa,targetDevice from upgrad.ads WHERE \$CONDITIONS" --split-by campaignID --hive-import --hive-table upgrad.ads --target-dir /user/root/CapstoneHiveDB
+
+The EC2 Security Groups [sg-0cbb82d3b05c597a4] contain one or more ingress rules to ports other than [22] which allow public access.
+
+export SPARK_KAFKA_VERSION=0.10
+
+
+
+
+problems summary ::
+:::: ERRORS
+        SERVER ERROR: Bad Gateway url=https://dl.bintray.com/spark-packages/maven/org/apache/apache/18/apache-18.jar
+
+        SERVER ERROR: Bad Gateway url=https://dl.bintray.com/spark-packages/maven/org/apache/spark/spark-parent_2.11/2.4.5/spark-parent_2.11-2.4.5.jar
+
+        SERVER ERROR: Bad Gateway url=https://dl.bintray.com/spark-packages/maven/org/apache/spark/spark-sql-kafka-0-10_2.11/2.4.5/spark-sql-kafka-0-10_2.11-2.4.5-javadoc.jar
+
+        SERVER ERROR: Bad Gateway url=https://dl.bintray.com/spark-packages/maven/org/slf4j/slf4j-parent/1.7.16/slf4j-parent-1.7.16.jar
+
+        SERVER ERROR: Bad Gateway url=https://dl.bintray.com/spark-packages/maven/org/sonatype/oss/oss-parent/9/oss-parent-9.jar
+
+hadoop fs -ls /user/root/
+
+less +G /var/spool/mail/root
+
+
+kafka_client = KafkaClient(kafka_bootstrap_server)
+        self.producer = kafka_client.topics[kafka_topic_name].get_producer(sync=True, delivery_reports=True)
+
+bin/kafka-console-consumer.sh --topic user-feedback --from-beginning --bootstrap-server 18.211.252.152:9092
+bin/kafka-console-producer.sh --topic user-feedback --from-beginning --bootstrap-server 18.211.252.152:9092
+
+
+
+create external table upgrad.adsfeedback( 
+request_id varchar(100), 
+campaign_id varchar(100), 
+user_id varchar(100), 
+click tinyint, 
+view tinyint, 
+acquisition tinyint, 
+auction_cpm double, 
+auction_cpc double, 
+auction_cpa double, 
+target_age_range varchar(10), 
+target_Location varchar(100), 
+target_gender varchar(3), 
+target_income_bucket varchar(3), 
+target_device_type varchar(20), 
+campaign_start_time timestamp, 
+campaign_end_time timestamp, 
+user_action varchar(20), 
+expenditure double, 
+time_stamp timestamp 
+) row format delimited fields terminated by ',';
+
+
+sqoop import -Dorg.apache.sqoop.splitter.allow_text_splitter=true --connect jdbc:mysql://ec2-18-207-162-52.compute-1.amazonaws.com:3306/upgrad --username root --password 123 \
+--query "select campaignID,category,budget,cpm,cpc,cpa,targetDevice from upgrad.ads WHERE \$CONDITIONS" \
+--split-by campaignID \
+--hive-import --hive-table upgrad.ads \
+--target-dir /user/root/UpGradHivedd3 \
+-m1
+
+load data inpath "home/hadoop/upgrad/*.csv" into table upgrad.adsfeedback;
+
+hadoop fs -cp  home/hadoop/user-feedback-output/part-00000-ff045df3-b99a-49b6-ab56-ce860248719a-c000.csv /root/
+
+sqoop import --connect jdbc:mysql://ec2-18-207-162-52.compute-1.amazonaws.com/upgrad --username root --password 123 --query "select campaignID,category,budget,cpm,cpc,cpa,targetDevice from upgrad.ads WHERE \$CONDITIONS" --split-by campaignID --hive-import --hive-table capstone.ads --target-dir /user/root/CapstoneHiveDB2 -m1
+
+
+
+
+sqoop import -Dorg.apache.sqoop.splitter.allow_text_splitter=true --connect jdbc:mysql://ec2-54-81-152-149.compute-1.amazonaws.com:3306/upgrad --username root --password 123 --query "select campaignID,category,budget,cpm,cpc,cpa,targetDevice from upgrad.ads WHERE \$CONDITIONS" --split-by campaignID --hive-import --hive-table upgrad.ads --target-dir /user/root/UpGradHivedd1 -m1
+
+
+hdfs dfs -chmod 777 /user/root/op11
+
+LOAD DATA INPATH "/user/root/op101/*.csv" INTO TABLE upgrad.adsfeedback;
+
+load data inpath "/user/root/op11/*.csv" into table upgrad.adsfeedback; >> working
+
+
+hdfs dfs -chmod 777 /user/root/op101
